@@ -50,16 +50,17 @@ jobs:
         run: |
           pytest tests/ -v
 
-      - name: Run linter
+      - name: Format and check code
         run: |
           pip install ruff black
-          # Format code first
-          ruff format src/ || true
-          black src/ || true
-          # Then check
+          # Format code
+          ruff format src/
+          black src/
+          # Check formatting (should pass after formatting)
           ruff format --check src/
-          ruff check src/
           black --check src/
+          # Run linter
+          ruff check src/
 
   build:
     name: Build Docker Images
