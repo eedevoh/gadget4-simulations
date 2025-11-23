@@ -68,4 +68,7 @@ class SimulationJob(Base):
     error_traceback = Column(String, nullable=True)
 
     def __repr__(self) -> str:
-        return f"<SimulationJob(id={self.id}, name={self.name}, status={self.status})>"
+        return (
+            f"<SimulationJob(id={self.id}, name={self.name}, "
+            f"status={self.status})>"
+        )

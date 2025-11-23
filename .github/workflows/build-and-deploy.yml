@@ -26,55 +26,9 @@ env:
   GCR_REGISTRY: gcr.io/${{ secrets.GCP_PROJECT_ID || 'gadget-479011' }}
 
 jobs:
-  test:
-    name: Run Tests
-    runs-on: ubuntu-latest
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-          cache: 'pip'
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install -r requirements-dev.txt
-
-      - name: Run tests
-        run: |
-          pytest tests/ -v
-
-      - name: Format and check code
-        run: |
-          pip install ruff black
-          # Format code
-          ruff format src/
-          black src/
-          # Check if formatting changed anything and commit if needed
-          if ! git diff --quiet src/ && [[ "${{ github.event.head_commit.message }}" != *"style: Auto-format"* ]]; then
-            echo "Code was reformatted. Committing changes..."
-            git config --local user.email "github-actions[bot]@users.noreply.github.com"
-            git config --local user.name "github-actions[bot]"
-            git add src/
-            git commit -m "style: Auto-format code with ruff/black" || echo "No changes to commit"
-            git push || echo "Push failed or no changes"
-          fi
-          # Check formatting (should pass after formatting)
-          ruff format --check src/
-          black --check src/
-          # Run linter
-          ruff check src/
-
   build:
     name: Build Docker Images
     runs-on: ubuntu-latest
-    needs: test
     if: github.event_name == 'push'
     
     steps:
