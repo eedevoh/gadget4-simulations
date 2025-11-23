@@ -56,6 +56,15 @@ jobs:
           # Format code
           ruff format src/
           black src/
+          # Check if formatting changed anything
+          if ! git diff --quiet src/; then
+            echo "Code was reformatted. Committing changes..."
+            git config --local user.email "github-actions[bot]@users.noreply.github.com"
+            git config --local user.name "github-actions[bot]"
+            git add src/
+            git commit -m "style: Auto-format code with ruff/black [skip ci]" || echo "No changes to commit"
+            git push || echo "Push failed or no changes"
+          fi
           # Check formatting (should pass after formatting)
           ruff format --check src/
           black --check src/
