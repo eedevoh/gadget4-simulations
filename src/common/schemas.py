@@ -12,7 +12,9 @@ class SimulationJobCreate(BaseModel):
     description: Optional[str] = Field(None, description="Job description")
     num_particles: int = Field(..., gt=0, description="Number of particles")
     box_size: float = Field(..., gt=0, description="Simulation box size in Mpc/h")
-    parameters: Optional[Dict[str, Any]] = Field(None, description="Additional Gadget4 parameters")
+    parameters: Optional[Dict[str, Any]] = Field(
+        None, description="Additional Gadget4 parameters"
+    )
 
 
 class SimulationJobUpdate(BaseModel):

@@ -29,7 +29,7 @@ app.conf.update(
     task_time_limit=settings.max_simulation_time,
     task_soft_time_limit=settings.max_simulation_time - 60,
     worker_prefetch_multiplier=1,  # One task at a time for long-running simulations
-    worker_max_tasks_per_child=5,   # Restart worker after 5 tasks to prevent memory leaks
+    worker_max_tasks_per_child=5,  # Restart worker after 5 tasks to prevent memory leaks
 )
 
 if __name__ == "__main__":

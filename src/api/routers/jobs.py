@@ -17,7 +17,11 @@ from common.schemas import (
 router = APIRouter()
 
 
-@router.post("/jobs", response_model=SimulationJobResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/jobs",
+    response_model=SimulationJobResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_job(job: SimulationJobCreate, db: Session = Depends(get_db)):
     """Create a new simulation job."""
     # Generate unique job ID
@@ -65,7 +69,12 @@ async def list_jobs(
     total = query.count()
 
     # Apply pagination
-    jobs = query.order_by(SimulationJob.created_at.desc()).offset(skip).limit(limit).all()
+    jobs = (
+        query.order_by(SimulationJob.created_at.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
 
     return SimulationJobList(
         jobs=jobs,
@@ -100,7 +109,11 @@ async def cancel_job(job_id: str, db: Session = Depends(get_db)):
             detail=f"Job {job_id} not found",
         )
 
-    if job.status in [JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED]:
+    if job.status in [
+        JobStatus.COMPLETED,
+        JobStatus.FAILED,
+        JobStatus.CANCELLED,
+    ]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Cannot cancel job in {job.status} state",

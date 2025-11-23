@@ -7,7 +7,9 @@ from typing import Optional
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=".env", env_file_encoding="utf-8", extra="ignore"
+    )
 
     # API Settings
     api_host: str = "0.0.0.0"
@@ -28,7 +30,7 @@ class Settings(BaseSettings):
 
     # Cloud Storage
     gcs_bucket: Optional[str] = None  # Google Cloud Storage bucket name
-    s3_bucket: Optional[str] = None   # AWS S3 bucket name
+    s3_bucket: Optional[str] = None  # AWS S3 bucket name
     storage_type: str = "gcs"  # "gcs" or "s3"
 
     # Environment

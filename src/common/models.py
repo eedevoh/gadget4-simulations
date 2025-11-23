@@ -2,7 +2,15 @@
 
 from enum import Enum
 
-from sqlalchemy import Column, String, Integer, Float, DateTime, JSON, Enum as SQLEnum
+from sqlalchemy import (
+    Column,
+    String,
+    Integer,
+    Float,
+    DateTime,
+    JSON,
+    Enum as SQLEnum,
+)
 from sqlalchemy.sql import func
 
 from .database import Base
@@ -26,7 +34,9 @@ class SimulationJob(Base):
     description = Column(String, nullable=True)
 
     # Status
-    status = Column(SQLEnum(JobStatus), default=JobStatus.PENDING, nullable=False, index=True)
+    status = Column(
+        SQLEnum(JobStatus), default=JobStatus.PENDING, nullable=False, index=True
+    )
     progress = Column(Float, default=0.0)  # 0.0 to 100.0
 
     # Simulation parameters
@@ -39,7 +49,9 @@ class SimulationJob(Base):
     output_files = Column(JSON, nullable=True)  # List of output files
 
     # Timing
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    created_at = Column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
     started_at = Column(DateTime(timezone=True), nullable=True)
     completed_at = Column(DateTime(timezone=True), nullable=True)
 
