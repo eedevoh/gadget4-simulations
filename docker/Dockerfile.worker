@@ -39,10 +39,10 @@ WORKDIR /app
 
 # Install runtime dependencies
 RUN apt-get update && apt-get install -y \
-    libopenmpi3 \
-    libhdf5-103 \
-    libfftw3-3 \
-    libgsl27 \
+    libopenmpi40 \
+    libhdf5-310 \
+    libfftw3-double3 \
+    libgsl28 \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy installed packages from base
