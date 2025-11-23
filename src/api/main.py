@@ -31,9 +31,7 @@ async def lifespan(app: FastAPI):
 # Create FastAPI application
 app = FastAPI(
     title="Gadget4 Simulations API",
-    description=(
-        "REST API for submitting and managing Gadget4 N-body simulations"
-    ),
+    description="REST API for submitting and managing Gadget4 N-body simulations",
     version="0.1.0",
     lifespan=lifespan,
 )

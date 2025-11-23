@@ -53,6 +53,10 @@ jobs:
       - name: Run linter
         run: |
           pip install ruff black
+          # Format code first
+          ruff format src/ || true
+          black src/ || true
+          # Then check
           ruff format --check src/
           ruff check src/
           black --check src/

@@ -70,10 +70,7 @@ async def list_jobs(
 
     # Apply pagination
     jobs = (
-        query.order_by(SimulationJob.created_at.desc())
-        .offset(skip)
-        .limit(limit)
-        .all()
+        query.order_by(SimulationJob.created_at.desc()).offset(skip).limit(limit).all()
     )
 
     return SimulationJobList(

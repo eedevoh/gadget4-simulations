@@ -1,6 +1,14 @@
 # Ruff configuration file
 # See https://docs.astral.sh/ruff/configuration/
 
+[format]
+# Use double quotes for strings
+quote-style = "double"
+# Indent with spaces
+indent-style = "space"
+# Line length (matches black default)
+line-ending = "auto"
+
 [lint.per-file-ignores]
 # Allow E402 (module level import not at top of file) in files that need sys.path manipulation
 # These files need to modify sys.path before importing local modules

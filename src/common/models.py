@@ -35,7 +35,10 @@ class SimulationJob(Base):
 
     # Status
     status = Column(
-        SQLEnum(JobStatus), default=JobStatus.PENDING, nullable=False, index=True
+        SQLEnum(JobStatus),
+        default=JobStatus.PENDING,
+        nullable=False,
+        index=True,
     )
     progress = Column(Float, default=0.0)  # 0.0 to 100.0
 
@@ -50,7 +53,9 @@ class SimulationJob(Base):
 
     # Timing
     created_at = Column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
     )
     started_at = Column(DateTime(timezone=True), nullable=True)
     completed_at = Column(DateTime(timezone=True), nullable=True)
