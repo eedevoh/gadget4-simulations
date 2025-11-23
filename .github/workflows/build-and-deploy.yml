@@ -1,0 +1,222 @@
+name: Build and Deploy
+
+# IMPORTANT: Grant permissions for the workflow to push commits
+permissions:
+  contents: write  # Required to push commits
+  id-token: write  # Required for GCP authentication
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'src/**'
+      - 'docker/**'
+      - 'k8s/**'
+      - '.github/workflows/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'docker/**'
+      - 'k8s/**'
+
+env:
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID || 'gadget-479011' }}
+  REGION: us-central1
+  GCR_REGISTRY: gcr.io/${{ secrets.GCP_PROJECT_ID || 'gadget-479011' }}
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: Run tests
+        run: |
+          pytest tests/ -v
+
+      - name: Run linter
+        run: |
+          pip install ruff black
+          ruff check src/
+          black --check src/
+
+  build:
+    name: Build Docker Images
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name == 'push'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          service_account_key: ${{ secrets.GCP_SA_KEY }}
+          project_id: ${{ secrets.GCP_PROJECT_ID || 'gadget-479011' }}
+          export_default_credentials: true
+
+      - name: Configure Docker for GCR
+        run: |
+          gcloud auth configure-docker --quiet
+
+      - name: Generate image tags
+        id: image-tags
+        run: |
+          SHORT_SHA=$(echo ${{ github.sha }} | cut -c1-7)
+          BRANCH_NAME=${GITHUB_REF#refs/heads/}
+          
+          if [ "$BRANCH_NAME" = "main" ]; then
+            TAG="stable-${SHORT_SHA}"
+            ENV="stable"
+          elif [ "$BRANCH_NAME" = "develop" ]; then
+            TAG="beta-${SHORT_SHA}"
+            ENV="beta"
+          else
+            TAG="dev-${SHORT_SHA}"
+            ENV="dev"
+          fi
+          
+          echo "tag=${TAG}" >> $GITHUB_OUTPUT
+          echo "env=${ENV}" >> $GITHUB_OUTPUT
+          echo "short_sha=${SHORT_SHA}" >> $GITHUB_OUTPUT
+          echo "Image tag: ${TAG}"
+
+      - name: Build API image
+        run: |
+          docker build \
+            -f docker/Dockerfile.api \
+            -t ${GCR_REGISTRY}/gadget4-api:${{ steps.image-tags.outputs.tag }} \
+            -t ${GCR_REGISTRY}/gadget4-api:latest \
+            .
+
+      - name: Build Gadget4 worker image
+        run: |
+          docker build \
+            -f docker/Dockerfile.worker-gadget4 \
+            -t ${GCR_REGISTRY}/gadget4-worker-gadget4:${{ steps.image-tags.outputs.tag }} \
+            -t ${GCR_REGISTRY}/gadget4-worker-gadget4:latest \
+            .
+
+      - name: Build CONCEPT worker image
+        run: |
+          docker build \
+            -f docker/Dockerfile.worker-concept \
+            -t ${GCR_REGISTRY}/gadget4-worker-concept:${{ steps.image-tags.outputs.tag }} \
+            -t ${GCR_REGISTRY}/gadget4-worker-concept:latest \
+            .
+
+      - name: Push images to GCR
+        run: |
+          docker push ${GCR_REGISTRY}/gadget4-api:${{ steps.image-tags.outputs.tag }}
+          docker push ${GCR_REGISTRY}/gadget4-api:latest
+          docker push ${GCR_REGISTRY}/gadget4-worker-gadget4:${{ steps.image-tags.outputs.tag }}
+          docker push ${GCR_REGISTRY}/gadget4-worker-gadget4:latest
+          docker push ${GCR_REGISTRY}/gadget4-worker-concept:${{ steps.image-tags.outputs.tag }}
+          docker push ${GCR_REGISTRY}/gadget4-worker-concept:latest
+
+      - name: Install kustomize
+        if: steps.image-tags.outputs.env != 'dev'
+        run: |
+          curl -s "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash
+          sudo mv kustomize /usr/local/bin/
+
+      - name: Update Kustomize image tags
+        if: steps.image-tags.outputs.env != 'dev'
+        run: |
+          ENV=${{ steps.image-tags.outputs.env }}
+          TAG=${{ steps.image-tags.outputs.tag }}
+          
+          cd k8s/overlays/${ENV}
+          
+          # Update image tags using kustomize (one per image)
+          kustomize edit set image ${GCR_REGISTRY}/gadget4-api:${TAG}
+          kustomize edit set image ${GCR_REGISTRY}/gadget4-worker-gadget4:${TAG}
+          kustomize edit set image ${GCR_REGISTRY}/gadget4-worker-concept:${TAG}
+
+      - name: Commit and push Kustomize changes
+        if: steps.image-tags.outputs.env != 'dev'
+        # IMPORTANT: Grant write permissions to contents
+        permissions:
+          contents: write
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          
+          ENV=${{ steps.image-tags.outputs.env }}
+          TAG=${{ steps.image-tags.outputs.tag }}
+          
+          git add k8s/overlays/${ENV}/kustomization.yaml
+          
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "chore: Update ${ENV} images to ${TAG}"
+            git push
+          fi
+
+  deploy:
+    name: Deploy to Kubernetes
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+    environment:
+      name: ${{ steps.image-tags.outputs.env }}
+      url: https://api.gadget4.example.com  # Update with your actual URL
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          service_account_key: ${{ secrets.GCP_SA_KEY }}
+          project_id: ${{ secrets.GCP_PROJECT_ID || 'gadget-479011' }}
+          export_default_credentials: true
+
+      - name: Configure kubectl
+        run: |
+          gcloud container clusters get-credentials ${{ secrets.GKE_CLUSTER_NAME }} \
+            --region ${{ secrets.GKE_REGION || 'us-central1' }} \
+            --project ${{ secrets.GCP_PROJECT_ID || 'gadget-479011' }}
+
+      - name: Generate environment
+        id: image-tags
+        run: |
+          BRANCH_NAME=${GITHUB_REF#refs/heads/}
+          if [ "$BRANCH_NAME" = "main" ]; then
+            echo "env=stable" >> $GITHUB_OUTPUT
+          else
+            echo "env=beta" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Deploy to Kubernetes
+        run: |
+          ENV=${{ steps.image-tags.outputs.env }}
+          kubectl apply -k k8s/overlays/${ENV}/
+
+      - name: Wait for rollout
+        run: |
+          ENV=${{ steps.image-tags.outputs.env }}
+          kubectl rollout status deployment/api -n gadget4-${ENV} --timeout=5m
+          kubectl rollout status deployment/gadget4-worker -n gadget4-${ENV} --timeout=5m
+          kubectl rollout status deployment/concept-worker -n gadget4-${ENV} --timeout=5m
+

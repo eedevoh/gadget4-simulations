@@ -1,0 +1,77 @@
+# Worker with CONCEPT simulator
+FROM python:3.11-slim as base
+
+WORKDIR /app
+
+# Install system dependencies for CONCEPT
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    gfortran \
+    make \
+    cython3 \
+    libopenmpi-dev \
+    openmpi-bin \
+    libfftw3-dev \
+    libgsl-dev \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Clone and install CONCEPT
+RUN git clone https://github.com/jmd-dk/concept.git /opt/concept && \
+    cd /opt/concept && \
+    bash install --no-interactive
+
+# Copy requirements
+COPY requirements.txt .
+
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Production stage
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y \
+    libopenmpi3 \
+    libfftw3-3 \
+    libgsl27 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy CONCEPT from base
+COPY --from=base /opt/concept /opt/concept
+
+# Copy Python packages from base
+COPY --from=base /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+COPY --from=base /usr/local/bin /usr/local/bin
+
+# Copy application code
+COPY src/ ./src/
+
+# Set environment variables
+ENV PATH="/opt/concept:${PATH}" \
+    CONCEPT_DIR="/opt/concept" \
+    PYTHONPATH="/opt/concept:${PYTHONPATH}" \
+    SIMULATOR_TYPE="concept"
+
+# Create directories for simulations
+RUN mkdir -p /tmp/simulations /data/output
+
+# Create non-root user
+RUN useradd -m -u 1000 worker && \
+    chown -R worker:worker /app /tmp/simulations /data/output /opt/concept
+USER worker
+
+# Health check
+HEALTHCHECK --interval=60s --timeout=10s --start-period=30s --retries=3 \
+    CMD celery -A src.workers.worker inspect ping || exit 1
+
+# Run Celery worker
+CMD ["celery", "-A", "src.workers.worker", "worker", \
+     "--loglevel=info", \
+     "--concurrency=1", \
+     "--max-tasks-per-child=5", \
+     "--queues=concept"]
+

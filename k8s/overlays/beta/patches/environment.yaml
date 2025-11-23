@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gadget4-api
+spec:
+  template:
+    spec:
+      containers:
+        - name: api
+          env:
+            - name: ENVIRONMENT
+              value: beta
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gadget4-worker
+spec:
+  template:
+    spec:
+      containers:
+        - name: worker
+          env:
+            - name: ENVIRONMENT
+              value: beta
+            - name: GCS_BUCKET
+              value: gadget4-results-beta

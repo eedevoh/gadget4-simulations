@@ -1,0 +1,6 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gadget4-worker
+spec:
+  replicas: 5

@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: gadget4-beta
+  labels:
+    environment: beta
+    app.kubernetes.io/name: gadget4

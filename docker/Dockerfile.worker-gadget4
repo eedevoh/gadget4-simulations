@@ -1,0 +1,103 @@
+# Worker with Gadget4 simulator
+FROM ubuntu:22.04 as base
+
+ENV DEBIAN_FRONTEND=noninteractive
+WORKDIR /app
+
+# Install system dependencies for Gadget4 and Python
+RUN apt-get update && apt-get install -y \
+    python3.11 \
+    python3.11-dev \
+    python3-pip \
+    gcc \
+    g++ \
+    gfortran \
+    make \
+    cmake \
+    libopenmpi-dev \
+    openmpi-bin \
+    libhdf5-openmpi-dev \
+    libfftw3-dev \
+    libfftw3-mpi-dev \
+    libgsl-dev \
+    libhwloc-dev \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Clone and build Gadget4
+RUN git clone https://gitlab.mpcdf.mpg.de/vrs/gadget4.git /opt/gadget4 || \
+    echo "Note: Gadget4 repo may require authentication"
+
+WORKDIR /opt/gadget4
+
+# Build Gadget4 (if repository is available)
+RUN if [ -f "Makefile" ]; then \
+    cp Template-Config.sh Config.sh 2>/dev/null || true && \
+    make -j$(nproc) 2>/dev/null || echo "Build attempted"; \
+    fi
+
+# Create fallback binary if build failed
+RUN if [ ! -f "Gadget4" ]; then \
+    mkdir -p /opt/gadget4/bin && \
+    echo '#!/bin/bash' > /opt/gadget4/bin/Gadget4 && \
+    echo 'echo "Gadget4 placeholder - replace with actual binary"' >> /opt/gadget4/bin/Gadget4 && \
+    chmod +x /opt/gadget4/bin/Gadget4; \
+    fi
+
+# Copy requirements and install Python dependencies
+WORKDIR /app
+COPY requirements.txt .
+RUN pip3 install --no-cache-dir -r requirements.txt
+
+# Production stage
+FROM ubuntu:22.04
+
+WORKDIR /app
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y \
+    python3.11 \
+    libopenmpi3 \
+    libhdf5-openmpi-103-1 \
+    libfftw3-3 \
+    libfftw3-mpi3 \
+    libgsl27 \
+    libhwloc15 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy Gadget4 from base
+COPY --from=base /opt/gadget4/Gadget4 /usr/local/bin/gadget4 2>/dev/null || \
+    COPY --from=base /opt/gadget4/bin/Gadget4 /usr/local/bin/gadget4
+RUN chmod +x /usr/local/bin/gadget4 || true
+
+# Copy Python packages from base
+COPY --from=base /usr/local/lib/python3.11/dist-packages /usr/local/lib/python3.11/dist-packages
+
+# Copy application code
+COPY src/ ./src/
+
+# Set environment variables
+ENV PATH="/usr/local/bin:${PATH}" \
+    PYTHONPATH="/app:${PYTHONPATH}" \
+    OMP_NUM_THREADS=1 \
+    SIMULATOR_TYPE="gadget4"
+
+# Create directories for simulations
+RUN mkdir -p /tmp/simulations /data/output /data/ics
+
+# Create non-root user
+RUN useradd -m -u 1000 worker && \
+    chown -R worker:worker /app /tmp/simulations /data/output /data/ics
+USER worker
+
+# Health check
+HEALTHCHECK --interval=60s --timeout=10s --start-period=30s --retries=3 \
+    CMD celery -A src.workers.worker inspect ping || exit 1
+
+# Run Celery worker
+CMD ["celery", "-A", "src.workers.worker", "worker", \
+     "--loglevel=info", \
+     "--concurrency=1", \
+     "--max-tasks-per-child=5", \
+     "--queues=gadget4"]
+

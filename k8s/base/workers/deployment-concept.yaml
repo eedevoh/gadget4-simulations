@@ -1,0 +1,69 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: concept-worker
+  labels:
+    app: concept-worker
+    component: worker
+    simulator: concept
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: concept-worker
+      simulator: concept
+  template:
+    metadata:
+      labels:
+        app: concept-worker
+        component: worker
+        simulator: concept
+    spec:
+      containers:
+        - name: worker
+          image: gcr.io/gadget-479011/gadget4-worker-concept:latest
+          imagePullPolicy: Always
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: gadget4-secrets
+                  key: database-url
+            - name: REDIS_URL
+              value: redis://redis:6379/0
+            - name: CELERY_BROKER_URL
+              value: redis://redis:6379/0
+            - name: CELERY_RESULT_BACKEND
+              value: redis://redis:6379/0
+            - name: GCS_BUCKET
+              value: gadget4-results-beta  # Overridden in overlays
+            - name: ENVIRONMENT
+              value: beta
+            - name: LOG_LEVEL
+              value: INFO
+            - name: MAX_SIMULATION_TIME
+              value: "3600"
+            - name: SIMULATOR_TYPE
+              value: concept
+            - name: CONCEPT_DIR
+              value: /opt/concept
+          resources:
+            requests:
+              cpu: 2000m
+              memory: 4Gi
+            limits:
+              cpu: 8000m
+              memory: 16Gi
+          volumeMounts:
+            - name: simulation-workspace
+              mountPath: /tmp/simulations
+            - name: concept-data
+              mountPath: /data
+      volumes:
+        - name: simulation-workspace
+          emptyDir:
+            sizeLimit: 20Gi
+        - name: concept-data
+          emptyDir:
+            sizeLimit: 10Gi
+

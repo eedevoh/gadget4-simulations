@@ -1,0 +1,108 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: gadget4-postgres
+    environment:
+      POSTGRES_USER: gadget4
+      POSTGRES_PASSWORD: gadget4
+      POSTGRES_DB: gadget4
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gadget4"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis for Celery
+  redis:
+    image: redis:7-alpine
+    container_name: gadget4-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # FastAPI API
+  api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+    container_name: gadget4-api
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://gadget4:gadget4@postgres:5432/gadget4
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      ENVIRONMENT: development
+      LOG_LEVEL: INFO
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # Gadget4 Workers
+  worker-gadget4:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.worker-gadget4
+    environment:
+      DATABASE_URL: postgresql://gadget4:gadget4@postgres:5432/gadget4
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      SIMULATOR_TYPE: gadget4
+      ENVIRONMENT: development
+      LOG_LEVEL: INFO
+      MAX_SIMULATION_TIME: 3600
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    deploy:
+      replicas: 2
+
+  # CONCEPT Workers
+  worker-concept:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.worker-concept
+    environment:
+      DATABASE_URL: postgresql://gadget4:gadget4@postgres:5432/gadget4
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      SIMULATOR_TYPE: concept
+      CONCEPT_DIR: /opt/concept
+      ENVIRONMENT: development
+      LOG_LEVEL: INFO
+      MAX_SIMULATION_TIME: 3600
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    deploy:
+      replicas: 1
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  default:
+    name: gadget4-network
+

@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gadget4-worker
+  labels:
+    app: gadget4-worker
+    component: worker
+    simulator: gadget4
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: gadget4-worker
+      simulator: gadget4
+  template:
+    metadata:
+      labels:
+        app: gadget4-worker
+        component: worker
+        simulator: gadget4
+    spec:
+      containers:
+        - name: worker
+          image: gcr.io/gadget-479011/gadget4-worker-gadget4:latest
+          imagePullPolicy: Always
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: gadget4-secrets
+                  key: database-url
+            - name: REDIS_URL
+              value: redis://redis:6379/0
+            - name: CELERY_BROKER_URL
+              value: redis://redis:6379/0
+            - name: CELERY_RESULT_BACKEND
+              value: redis://redis:6379/0
+            - name: GCS_BUCKET
+              value: gadget4-results-beta  # Overridden in overlays
+            - name: ENVIRONMENT
+              value: beta
+            - name: LOG_LEVEL
+              value: INFO
+            - name: MAX_SIMULATION_TIME
+              value: "3600"
+            - name: SIMULATOR_TYPE
+              value: gadget4
+          resources:
+            requests:
+              cpu: 2000m
+              memory: 4Gi
+            limits:
+              cpu: 8000m
+              memory: 16Gi
+          volumeMounts:
+            - name: simulation-workspace
+              mountPath: /tmp/simulations
+            - name: gadget4-data
+              mountPath: /data
+      volumes:
+        - name: simulation-workspace
+          emptyDir:
+            sizeLimit: 20Gi
+        - name: gadget4-data
+          emptyDir:
+            sizeLimit: 10Gi
+

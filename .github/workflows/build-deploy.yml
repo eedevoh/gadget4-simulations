@@ -1,0 +1,147 @@
+name: Build and Deploy
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'beta'
+        type: choice
+        options:
+          - beta
+          - stable
+
+env:
+  PROJECT_ID: gadget-479011
+  REGION: us-central1
+  GCR_REGISTRY: gcr.io/gadget-479011
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: Run linting
+        run: |
+          ruff check src/
+          black --check src/
+
+      - name: Run tests
+        run: |
+          pytest tests/ -v --cov=src --cov-report=xml
+
+  build-and-push:
+    name: Build and Push Docker Images
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name != 'pull_request'
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for GCR
+        run: |
+          gcloud auth configure-docker
+
+      - name: Determine environment and tags
+        id: determine-env
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            ENV="${{ github.event.inputs.environment }}"
+          elif [ "${{ github.ref }}" == "refs/heads/main" ]; then
+            ENV="stable"
+          else
+            ENV="beta"
+          fi
+
+          echo "environment=$ENV" >> $GITHUB_OUTPUT
+          echo "tag=$ENV-$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+          echo "latest_tag=$ENV-latest" >> $GITHUB_OUTPUT
+
+      - name: Build API image
+        run: |
+          docker build \
+            -f docker/Dockerfile.api \
+            -t ${{ env.GCR_REGISTRY }}/gadget4-api:${{ steps.determine-env.outputs.tag }} \
+            -t ${{ env.GCR_REGISTRY }}/gadget4-api:${{ steps.determine-env.outputs.latest_tag }} \
+            .
+
+      - name: Build Worker image
+        run: |
+          docker build \
+            -f docker/Dockerfile.worker \
+            -t ${{ env.GCR_REGISTRY }}/gadget4-worker:${{ steps.determine-env.outputs.tag }} \
+            -t ${{ env.GCR_REGISTRY }}/gadget4-worker:${{ steps.determine-env.outputs.latest_tag }} \
+            .
+
+      - name: Push images to GCR
+        run: |
+          docker push ${{ env.GCR_REGISTRY }}/gadget4-api:${{ steps.determine-env.outputs.tag }}
+          docker push ${{ env.GCR_REGISTRY }}/gadget4-api:${{ steps.determine-env.outputs.latest_tag }}
+          docker push ${{ env.GCR_REGISTRY }}/gadget4-worker:${{ steps.determine-env.outputs.tag }}
+          docker push ${{ env.GCR_REGISTRY }}/gadget4-worker:${{ steps.determine-env.outputs.latest_tag }}
+
+      - name: Update Kustomization with new image tags
+        run: |
+          ENV=${{ steps.determine-env.outputs.environment }}
+          TAG=${{ steps.determine-env.outputs.tag }}
+
+          # Update kustomization.yaml with new tags
+          cd k8s/overlays/$ENV
+          kustomize edit set image \
+            gcr.io/gadget-479011/gadget4-api:$TAG \
+            gcr.io/gadget-479011/gadget4-worker:$TAG
+
+          # Commit and push changes
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add kustomization.yaml
+          git commit -m "chore: Update $ENV images to $TAG" || echo "No changes to commit"
+          git push || echo "Nothing to push"
+
+      - name: Output deployment info
+        run: |
+          echo "## 🚀 Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Environment:** ${{ steps.determine-env.outputs.environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Image Tag:** ${{ steps.determine-env.outputs.tag }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Images:**" >> $GITHUB_STEP_SUMMARY
+          echo "  - API: \`${{ env.GCR_REGISTRY }}/gadget4-api:${{ steps.determine-env.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "  - Worker: \`${{ env.GCR_REGISTRY }}/gadget4-worker:${{ steps.determine-env.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "ArgoCD will automatically sync the new images to the cluster." >> $GITHUB_STEP_SUMMARY

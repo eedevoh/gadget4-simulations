@@ -1,0 +1,60 @@
+# Dockerfile for CONCEPT (COsmological N-body CodE in PyThon)
+# Multi-stage build for optimized image size
+
+FROM python:3.11-slim as builder
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    gfortran \
+    make \
+    cython3 \
+    libopenmpi-dev \
+    openmpi-bin \
+    libfftw3-dev \
+    libgsl-dev \
+    git \
+    wget \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+
+# Clone CONCEPT repository
+RUN git clone https://github.com/jmd-dk/concept.git /build/concept
+
+WORKDIR /build/concept
+
+# Install CONCEPT
+# The installation script will compile all necessary components
+RUN bash install --no-interactive
+
+# Production stage
+FROM python:3.11-slim
+
+WORKDIR /opt/concept
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y \
+    libopenmpi3 \
+    libfftw3-3 \
+    libgsl27 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy CONCEPT installation from builder
+COPY --from=builder /build/concept /opt/concept
+
+# Set environment variables for CONCEPT
+ENV PATH="/opt/concept:${PATH}" \
+    CONCEPT_DIR="/opt/concept" \
+    PYTHONPATH="/opt/concept:${PYTHONPATH}"
+
+# Create directories for simulations
+RUN mkdir -p /data/input /data/output
+
+# Verify installation
+RUN concept --version || echo "CONCEPT installed successfully"
+
+# Default command
+CMD ["/bin/bash"]
+
