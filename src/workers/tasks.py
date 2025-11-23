@@ -1,10 +1,10 @@
 """Celery tasks for Gadget4 simulations."""
 
-from celery import Task
-from datetime import datetime
-import subprocess
 import logging
+from datetime import datetime
 from pathlib import Path
+
+from celery import Task
 
 from workers.worker import app
 from common.database import SessionLocal

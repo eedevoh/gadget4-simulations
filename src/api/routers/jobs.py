@@ -1,9 +1,9 @@
 """API endpoints for simulation jobs."""
 
+import uuid
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from typing import List
-import uuid
 
 from common.database import get_db
 from common.models import SimulationJob, JobStatus

@@ -1,9 +1,9 @@
 """Database models for simulation jobs."""
 
+from enum import Enum
+
 from sqlalchemy import Column, String, Integer, Float, DateTime, JSON, Enum as SQLEnum
 from sqlalchemy.sql import func
-from datetime import datetime
-from enum import Enum
 
 from .database import Base
 

@@ -1,13 +1,14 @@
 """Celery worker configuration."""
 
-from celery import Celery
 import sys
 from pathlib import Path
+
+from celery import Celery
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from common.config import settings
+from common.config import settings  # noqa: E402
 
 # Create Celery application
 app = Celery(

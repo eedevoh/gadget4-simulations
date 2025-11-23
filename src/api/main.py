@@ -1,19 +1,19 @@
 """FastAPI application main entry point."""
 
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from contextlib import asynccontextmanager
-
 import sys
 from pathlib import Path
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from common.config import settings
-from common.database import init_db
-from common.schemas import HealthResponse
-from api.routers import jobs
+from common.config import settings  # noqa: E402
+from common.database import init_db  # noqa: E402
+from common.schemas import HealthResponse  # noqa: E402
+from api.routers import jobs  # noqa: E402
 
 
 @asynccontextmanager

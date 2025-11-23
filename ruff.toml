@@ -1,0 +1,9 @@
+# Ruff configuration file
+# See https://docs.astral.sh/ruff/configuration/
+
+[lint.per-file-ignores]
+# Allow E402 (module level import not at top of file) in files that need sys.path manipulation
+# These files need to modify sys.path before importing local modules
+"src/api/main.py" = ["E402"]
+"src/workers/worker.py" = ["E402"]
+
